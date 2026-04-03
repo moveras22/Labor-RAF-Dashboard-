@@ -1,8 +1,20 @@
-import streamlit as st
 import pandas as pd
-import base64
+import os
+import streamlit as st
 
-st.set_page_config(page_title="Labor / RAF Dashboard", layout="wide")
+DATA_FILE = "saved_data.csv"
+
+def load_data():
+    if os.path.exists(DATA_FILE):
+        return pd.read_csv(DATA_FILE)
+    return pd.DataFrame()
+
+def save_data(df):
+    df.to_csv(DATA_FILE, index=False)
+
+# Initialize session state (THIS FIXES TAB RESET ISSUE)
+if "df" not in st.session_state:
+    st.session_state.df = load_data()
 
 # =============================
 # SESSION STATE INIT (DO NOT REMOVE)
