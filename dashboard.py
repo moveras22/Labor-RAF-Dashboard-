@@ -212,10 +212,23 @@ elif menu == "📅 Weekly Tracker":
 
     weekly_target = target_daily * 5
 
-    remaining = weekly_target - total_raf
-    remaining_days = max(1, 5 - days_entered)
-    needed = remaining / remaining_days if remaining_days > 0 else 0
+   remaining_days = max(1, 5 - days_entered)
 
+    # TARGET TOTAL LABOR BASED ON TARGET LPR
+    target_total_labor = target_lpr * (target_daily * 5)
+
+    # HOW MUCH LABOR YOU'VE ALREADY SPENT
+    labor_used = total_labor
+
+    # REMAINING LABOR BUDGET
+    remaining_labor_budget = target_total_labor - labor_used
+
+    # RAF NEEDED TO HIT TARGET LPR
+    required_total_raf = total_labor / target_lpr if target_lpr > 0 else 0
+
+    remaining_raf_needed = required_total_raf - total_raf
+
+    needed = remaining_raf_needed / remaining_days if remaining_days > 0 else 0
     st.divider()
 
     c1,c2,c3,c4 = st.columns(4)
