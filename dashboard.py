@@ -212,23 +212,21 @@ elif menu == "📅 Weekly Tracker":
 
     weekly_target = target_daily * 5
 
-   remaining_days = max(1, 5 - days_entered)
+    # =============================
+    # 🔥 FIXED RECOVERY LOGIC
+    # =============================
+    remaining_days = max(1, 5 - days_entered)
 
-    # TARGET TOTAL LABOR BASED ON TARGET LPR
-    target_total_labor = target_lpr * (target_daily * 5)
-
-    # HOW MUCH LABOR YOU'VE ALREADY SPENT
+    target_total_labor = target_lpr * weekly_target
     labor_used = total_labor
 
-    # REMAINING LABOR BUDGET
     remaining_labor_budget = target_total_labor - labor_used
 
-    # RAF NEEDED TO HIT TARGET LPR
     required_total_raf = total_labor / target_lpr if target_lpr > 0 else 0
-
     remaining_raf_needed = required_total_raf - total_raf
 
     needed = remaining_raf_needed / remaining_days if remaining_days > 0 else 0
+
     st.divider()
 
     c1,c2,c3,c4 = st.columns(4)
@@ -247,8 +245,8 @@ elif menu == "📅 Weekly Tracker":
         else:
             st.success("Labor OK")
 
-        if projected_raf < weekly_target:
-            st.error(f"Need {needed:.1f}/day to recover")
+        if projected_lpr > target_lpr:
+            st.error(f"Need {needed:.1f}/day to hit {target_lpr} Labor/RAF")
         else:
             st.success("On pace")
 
