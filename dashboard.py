@@ -5,19 +5,20 @@ import base64
 st.set_page_config(page_title="Labor / RAF Dashboard", layout="wide")
 
 # =============================
-# SESSION STATE INIT (DO NOT REMOVE)
+# SESSION STATE INIT
 # =============================
-if "daily_raf" not in st.session_state:
-    st.session_state.daily_raf = [0]*14
+def init_state():
+    if "daily_raf" not in st.session_state:
+        st.session_state.daily_raf = [0]*14
+    if "weekly_raf" not in st.session_state:
+        st.session_state.weekly_raf = [0]*5
+    if "weekly_labor" not in st.session_state:
+        st.session_state.weekly_labor = [0]*5
 
-if "weekly_raf" not in st.session_state:
-    st.session_state.weekly_raf = [0]*5
-
-if "weekly_labor" not in st.session_state:
-    st.session_state.weekly_labor = [0]*5
+init_state()
 
 # =============================
-# HEADER IMAGE
+# IMAGE
 # =============================
 def get_base64(img):
     with open(img, "rb") as f:
@@ -37,7 +38,7 @@ st.title("📊 Labor / RAF Control Dashboard")
 menu = st.radio("", ["📊 Daily Dashboard", "📅 Weekly Tracker"], horizontal=True)
 
 # =====================================================
-# DAILY TAB (UNCHANGED)
+# DAILY DASHBOARD
 # =====================================================
 if menu == "📊 Daily Dashboard":
 
@@ -78,10 +79,15 @@ if menu == "📊 Daily Dashboard":
     total_raf = sum(raf)
     lpr = total_cost / total_raf if total_raf > 0 else 0
 
+    # SHIFT SPLIT
     first_shift = sum(raf[:7])
     second_shift = sum(raf[7:])
 
+    # HOURS TRACKING
     hours_entered = sum(1 for x in raf if x > 0)
+    remaining_hours = max(1, 14 - hours_entered)
+
+    remaining_units = target - total_raf
     projected = (total_raf / hours_entered)*14 if hours_entered > 0 else 0
 
     st.divider()
@@ -96,7 +102,9 @@ if menu == "📊 Daily Dashboard":
 
     st.divider()
 
-    # 2ND SHIFT PREDICTOR (UNCHANGED)
+    # =============================
+    # 🔥 2ND SHIFT PREDICTOR
+    # =============================
     if first_shift > 0:
 
         second_needed = target - first_shift
@@ -111,22 +119,42 @@ if menu == "📊 Daily Dashboard":
             st.info(f"""
 🔹 1st Shift Output: {int(first_shift)}
 
-🔹 2nd Shift Needs:
-- {int(second_needed)} units total to hit {target}
+🔹 2nd Shift Requirements:
+- {int(second_needed)} units TOTAL to hit {target}
 - {full_shift_rate:.1f}/hr (full shift pace)
 - {live_rate:.1f}/hr (based on remaining hours)
 """)
         else:
-            st.success("1st shift already hit target")
+            st.success("1st shift already hit or exceeded target")
 
     st.divider()
 
+    # ALERTS
+    st.subheader("🚨 Alerts")
+
+    if total_raf > 0:
+        if lpr > 305:
+            st.error("Labor/RAF HIGH")
+        else:
+            st.success("Labor OK")
+
+        if projected < target:
+            st.error(f"Off pace → projected {int(projected)} vs {target}")
+        else:
+            st.success("On pace")
+
+    st.divider()
+
+    # CHART
     st.subheader("📈 Trend vs Target")
     chart_df = df[["Hour","Cumulative RAF","Target"]].set_index("Hour")
     st.line_chart(chart_df)
 
+    st.divider()
+    st.dataframe(df, use_container_width=True)
+
 # =====================================================
-# WEEKLY TAB (FIXED LOGIC ONLY)
+# WEEKLY TRACKER
 # =====================================================
 elif menu == "📅 Weekly Tracker":
 
@@ -174,42 +202,42 @@ elif menu == "📅 Weekly Tracker":
 
     week_lpr = total_labor / total_raf if total_raf > 0 else 0
 
+    avg_raf = total_raf / days_entered if days_entered > 0 else 0
+    avg_labor = total_labor / days_entered if days_entered > 0 else 0
+
+    projected_raf = avg_raf * 5 if days_entered > 0 else 0
+    projected_labor = avg_labor * 5 if days_entered > 0 else 0
+
+    projected_lpr = projected_labor / projected_raf if projected_raf > 0 else 0
+
     weekly_target = target_daily * 5
+
+    remaining = weekly_target - total_raf
+    remaining_days = max(1, 5 - days_entered)
+    needed = remaining / remaining_days if remaining_days > 0 else 0
 
     st.divider()
 
-    c1,c2,c3 = st.columns(3)
+    c1,c2,c3,c4 = st.columns(4)
 
     c1.metric("Week RAF", int(total_raf))
     c2.metric("Week Labor/RAF", f"{week_lpr:.2f}")
-    c3.metric("RAF Target", weekly_target)
+    c3.metric("Projected RAF", f"{projected_raf:.0f}")
+    c4.metric("Projected Labor/RAF", f"{projected_lpr:.2f}")
 
     st.divider()
 
-    # =============================
-    # 🔥 FIXED RECOVERY LOGIC (LABOR BASED)
-    # =============================
     if total_raf > 0:
 
-        required_raf = total_labor / target_lpr if target_lpr > 0 else 0
-        remaining = required_raf - total_raf
-
-        remaining_days = max(1, 5 - days_entered)
-
-        needed = remaining / remaining_days if remaining_days > 0 else 0
-
-        if week_lpr > target_lpr:
-            st.error(f"""
-To recover Labor/RAF:
-
-Required RAF: {required_raf:.0f}
-Current RAF: {total_raf}
-Gap: {remaining:.0f}
-
-👉 Need {needed:.1f}/day to recover
-""")
+        if projected_lpr > target_lpr:
+            st.error("Labor trending HIGH")
         else:
-            st.success("Labor/RAF on target")
+            st.success("Labor OK")
+
+        if projected_raf < weekly_target:
+            st.error(f"Need {needed:.1f}/day to recover")
+        else:
+            st.success("On pace")
 
     df_week = pd.DataFrame({
         "Day": days,
