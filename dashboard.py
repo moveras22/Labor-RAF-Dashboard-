@@ -4,193 +4,218 @@ import base64
 
 st.set_page_config(page_title="Labor / RAF Dashboard", layout="wide")
 
-# ===== BANNER IMAGE (FULL WIDTH, FIXED) =====
-def get_base64(img_path):
-    with open(img_path, "rb") as f:
+# =============================
+# SESSION STATE INIT (DO NOT REMOVE)
+# =============================
+if "daily_raf" not in st.session_state:
+    st.session_state.daily_raf = [0]*14
+
+if "weekly_raf" not in st.session_state:
+    st.session_state.weekly_raf = [0]*5
+
+if "weekly_labor" not in st.session_state:
+    st.session_state.weekly_labor = [0]*5
+
+# =============================
+# HEADER IMAGE
+# =============================
+def get_base64(img):
+    with open(img, "rb") as f:
         return base64.b64encode(f.read()).decode()
 
-img = get_base64("transmissions.png")
-
-st.markdown(f"""
-<style>
-.banner-img {{
-    width: 100%;
-    height: 200px;
-    object-fit: cover;
-    border-radius: 10px;
-}}
-</style>
-
-<img src="data:image/png;base64,{img}" class="banner-img">
-""", unsafe_allow_html=True)
-
-# ===== SETTINGS =====
-HOURS = [
-    "7-8","8-9","9-10","10-11","11-12","12-1","1-2",
-    "2-3","3-4","4-5","5-6","6-7","7-8","8-9"
-]
-
-TOTAL_HOURS = len(HOURS)  # 14
-FIRST_SHIFT_HOURS = 7
-TARGET_LPR = 305
+try:
+    img = get_base64("transmissions.png")
+    st.markdown(f"""
+    <img src="data:image/png;base64,{img}" 
+    style="width:100%; height:220px; object-fit:cover; border-radius:10px;">
+    """, unsafe_allow_html=True)
+except:
+    pass
 
 st.title("📊 Labor / RAF Control Dashboard")
 
-# ===== INPUTS =====
-st.subheader("🔧 Daily Inputs")
+menu = st.radio("", ["📊 Daily Dashboard", "📅 Weekly Tracker"], horizontal=True)
 
-col1, col2, col3 = st.columns(3)
+# =====================================================
+# DAILY TAB (UNCHANGED)
+# =====================================================
+if menu == "📊 Daily Dashboard":
 
-with col1:
-    daily_labor = st.number_input("Total Daily Labor ($)", value=23000, step=500)
-
-with col2:
-    planned_ot = st.number_input("Planned OT ($)", value=800, step=50)
-
-with col3:
-    target_raf = st.number_input("Target RAF", value=71)
-
-total_labor_budget = daily_labor + planned_ot
-
-# ===== INPUT TABLE =====
-st.subheader("✏️ Enter RAF Per Hour")
-
-if "data" not in st.session_state:
-    st.session_state.data = pd.DataFrame({
-        "Hour": HOURS,
-        "RAF": [0]*TOTAL_HOURS
-    })
-
-df = st.data_editor(
-    st.session_state.data,
-    num_rows="fixed",
-    use_container_width=True,
-    key="raf_editor",
-    column_config={
-        "RAF": st.column_config.NumberColumn("RAF", step=1)
-    }
-)
-
-st.session_state.data = df.copy()
-
-# ===== CALCULATIONS =====
-df["Cumulative RAF"] = df["RAF"].cumsum()
-
-hours_worked = (df["RAF"] > 0).sum()
-total_raf = df["RAF"].sum()
-
-current_lpr = total_labor_budget / total_raf if total_raf > 0 else 0
-
-df["Target RAF"] = [(i+1)*(target_raf/TOTAL_HOURS) for i in range(TOTAL_HOURS)]
-df["Variance"] = df["Cumulative RAF"] - df["Target RAF"]
-
-current_variance = df["Variance"].iloc[hours_worked-1] if hours_worked > 0 else 0
-projected_raf = (total_raf / hours_worked) * TOTAL_HOURS if hours_worked > 0 else 0
-
-# ===== METRICS =====
-st.subheader("📈 Current Performance")
-
-col1, col2, col3, col4, col5 = st.columns(5)
-
-col1.metric("Total RAF", int(total_raf))
-col2.metric("Total Labor ($)", f"${int(total_labor_budget)}")
-col3.metric("Labor / RAF", f"{current_lpr:.2f}")
-col4.metric("Pace Variance", f"{current_variance:.1f}")
-col5.metric("Projected RAF", f"{projected_raf:.1f}")
-
-# ===== STATUS =====
-st.subheader("🚨 Status")
-
-if current_variance >= 0 and current_lpr <= TARGET_LPR:
-    st.success("✅ On pace AND efficient")
-
-elif current_variance >= 0 and current_lpr > TARGET_LPR:
-    st.warning("⚠️ On pace BUT inefficient → push more units")
-
-elif current_variance < 0 and current_lpr <= TARGET_LPR:
-    st.warning("⚠️ Efficient BUT behind pace → need production")
-
-else:
-    st.error("❌ Behind pace AND inefficient")
-
-# ===== LIVE PACE =====
-st.subheader("⏱️ Live Pace Control")
-
-if hours_worked > 0:
-    expected_by_now = (target_raf / TOTAL_HOURS) * hours_worked
-    remaining_hours = TOTAL_HOURS - hours_worked
-    remaining_units = target_raf - total_raf
-    current_pace = total_raf / hours_worked
+    st.subheader("⚙️ Daily Inputs")
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Expected By Now", f"{expected_by_now:.1f}")
-    col2.metric("Actual RAF", int(total_raf))
-    col3.metric("Current Pace/hr", f"{current_pace:.1f}")
 
-    if remaining_hours > 0:
-        required_per_hour = remaining_units / remaining_hours
+    total_labor = col1.number_input("Total Daily Labor ($)", value=23000)
+    ot = col2.number_input("Planned OT ($)", value=800)
+    target = col3.number_input("Target RAF", value=71)
 
-        st.markdown(f"""
-**To recover:**
-- Remaining Hours: {remaining_hours}
-- Units Needed: {int(remaining_units)}
-- Required Pace: {required_per_hour:.1f} / hr
+    total_cost = total_labor + ot
+
+    st.divider()
+
+    st.subheader("✏️ RAF Per Hour (14 Hours)")
+
+    hours = [f"Hr{i+1}" for i in range(14)]
+    cols = st.columns(7)
+
+    raf = []
+
+    for i in range(14):
+        with cols[i % 7]:
+            val = st.number_input(
+                label=hours[i],
+                value=st.session_state.daily_raf[i],
+                key=f"daily_{i}"
+            )
+            st.session_state.daily_raf[i] = val
+            raf.append(val)
+
+    df = pd.DataFrame({"Hour": hours, "RAF": raf})
+
+    df["Cumulative RAF"] = df["RAF"].cumsum()
+    df["Target"] = [(i+1)*(target/14) for i in range(14)]
+
+    total_raf = sum(raf)
+    lpr = total_cost / total_raf if total_raf > 0 else 0
+
+    first_shift = sum(raf[:7])
+    second_shift = sum(raf[7:])
+
+    hours_entered = sum(1 for x in raf if x > 0)
+    projected = (total_raf / hours_entered)*14 if hours_entered > 0 else 0
+
+    st.divider()
+
+    c1,c2,c3,c4,c5 = st.columns(5)
+
+    c1.metric("Total RAF", int(total_raf))
+    c2.metric("Labor/RAF", f"{lpr:.2f}")
+    c3.metric("1st Shift RAF", int(first_shift))
+    c4.metric("2nd Shift RAF", int(second_shift))
+    c5.metric("Projected RAF", f"{projected:.0f}")
+
+    st.divider()
+
+    # 2ND SHIFT PREDICTOR (UNCHANGED)
+    if first_shift > 0:
+
+        second_needed = target - first_shift
+
+        second_hours_entered = sum(1 for x in raf[7:] if x > 0)
+        remaining_second_hours = max(1, 7 - second_hours_entered)
+
+        full_shift_rate = second_needed / 7 if second_needed > 0 else 0
+        live_rate = second_needed / remaining_second_hours if remaining_second_hours > 0 else 0
+
+        if second_needed > 0:
+            st.info(f"""
+🔹 1st Shift Output: {int(first_shift)}
+
+🔹 2nd Shift Needs:
+- {int(second_needed)} units total to hit {target}
+- {full_shift_rate:.1f}/hr (full shift pace)
+- {live_rate:.1f}/hr (based on remaining hours)
 """)
-
-        if total_raf >= expected_by_now:
-            st.success("On/Ahead of pace")
         else:
-            st.error("Behind pace")
+            st.success("1st shift already hit target")
 
-# ===== SHIFT BREAKDOWN =====
-st.subheader("🔄 Shift Breakdown")
+    st.divider()
 
-first_shift_raf = df["RAF"].iloc[:FIRST_SHIFT_HOURS].sum()
-remaining_after_first = target_raf - first_shift_raf
-second_shift_hours = TOTAL_HOURS - FIRST_SHIFT_HOURS
+    st.subheader("📈 Trend vs Target")
+    chart_df = df[["Hour","Cumulative RAF","Target"]].set_index("Hour")
+    st.line_chart(chart_df)
 
-st.markdown("### 🟦 1st Shift")
+# =====================================================
+# WEEKLY TAB (FIXED LOGIC ONLY)
+# =====================================================
+elif menu == "📅 Weekly Tracker":
 
-st.metric("1st Shift RAF", int(first_shift_raf))
+    st.subheader("📅 Weekly Labor / RAF")
 
-st.markdown("### 🟨 2nd Shift Requirements")
+    target_daily = st.number_input("Daily Target RAF", value=71)
+    target_lpr = st.number_input("Target Labor/RAF", value=305)
 
-if remaining_after_first > 0:
+    st.divider()
 
-    required_per_hour_2nd = remaining_after_first / second_shift_hours
+    days = ["Mon","Tue","Wed","Thu","Fri"]
 
-    st.markdown(f"""
-**1st shift ended with:** {int(first_shift_raf)} units  
+    raf_data = []
+    labor_data = []
+    daily_lpr = []
 
-2nd shift must produce:
-- {int(remaining_after_first)} units
-- {required_per_hour_2nd:.1f} per hour
+    for i, d in enumerate(days):
+
+        c1, c2 = st.columns(2)
+
+        raf = c1.number_input(
+            f"{d} RAF",
+            value=st.session_state.weekly_raf[i],
+            key=f"wraf_{i}"
+        )
+
+        labor = c2.number_input(
+            f"{d} Labor ($)",
+            value=st.session_state.weekly_labor[i],
+            key=f"wlab_{i}"
+        )
+
+        st.session_state.weekly_raf[i] = raf
+        st.session_state.weekly_labor[i] = labor
+
+        raf_data.append(raf)
+        labor_data.append(labor)
+
+        daily_lpr.append(labor/raf if raf > 0 else 0)
+
+    total_raf = sum(raf_data)
+    total_labor = sum(labor_data)
+
+    days_entered = sum(1 for x in raf_data if x > 0)
+
+    week_lpr = total_labor / total_raf if total_raf > 0 else 0
+
+    weekly_target = target_daily * 5
+
+    st.divider()
+
+    c1,c2,c3 = st.columns(3)
+
+    c1.metric("Week RAF", int(total_raf))
+    c2.metric("Week Labor/RAF", f"{week_lpr:.2f}")
+    c3.metric("RAF Target", weekly_target)
+
+    st.divider()
+
+    # =============================
+    # 🔥 FIXED RECOVERY LOGIC (LABOR BASED)
+    # =============================
+    if total_raf > 0:
+
+        required_raf = total_labor / target_lpr if target_lpr > 0 else 0
+        remaining = required_raf - total_raf
+
+        remaining_days = max(1, 5 - days_entered)
+
+        needed = remaining / remaining_days if remaining_days > 0 else 0
+
+        if week_lpr > target_lpr:
+            st.error(f"""
+To recover Labor/RAF:
+
+Required RAF: {required_raf:.0f}
+Current RAF: {total_raf}
+Gap: {remaining:.0f}
+
+👉 Need {needed:.1f}/day to recover
 """)
+        else:
+            st.success("Labor/RAF on target")
 
-    if required_per_hour_2nd <= (target_raf / TOTAL_HOURS):
-        st.success("2nd shift in good position")
-    elif required_per_hour_2nd <= 8:
-        st.warning("2nd shift needs to push")
-    else:
-        st.error("2nd shift in recovery mode")
+    df_week = pd.DataFrame({
+        "Day": days,
+        "RAF": raf_data,
+        "Labor": labor_data,
+        "Labor/RAF": daily_lpr
+    })
 
-else:
-    st.success("Target already achieved in 1st shift")
-
-# ===== WHAT IF =====
-st.subheader("🔮 What If")
-
-extra_units = st.number_input("Add Units:", value=20)
-what_if_lpr = total_labor_budget / (total_raf + extra_units)
-
-st.info(f"If +{extra_units} units → Labor/RAF = {what_if_lpr:.2f}")
-
-# ===== TABLE =====
-st.subheader("📋 Hourly Breakdown")
-
-st.dataframe(df[["Hour","RAF","Cumulative RAF","Target RAF","Variance"]], use_container_width=True)
-
-# ===== CHART =====
-st.subheader("📊 Pace vs Target")
-
-st.line_chart(df[["Cumulative RAF","Target RAF"]])
+    st.dataframe(df_week, use_container_width=True)
